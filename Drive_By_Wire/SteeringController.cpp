@@ -51,11 +51,7 @@ int32_t SteeringController::update(int32_t desiredAngle) {
     mappedAngle = map(desiredAngle, 722, 639, 1500, MAX_TURN_MS);
   }
 
-  if (USE_PIDS) {
-    SteeringPID(mappedAngle);
-  } else {
-    engageSteering(mappedAngle);
-  }
+  engageSteering(mappedAngle);
   
   delay(1);
 
@@ -78,7 +74,7 @@ void SteeringController::SteeringPID(int32_t input) {
 
 // Outputs a PWM based on input (1ms - 1.85ms)
 void SteeringController::engageSteering(int32_t input) {
-  if (input > MAX_TURN_MS)
+  /*if (input > MAX_TURN_MS)
     input = MAX_TURN_MS;
   else if (input < MIN_TURN_MS)
     input = MIN_TURN_MS;
@@ -88,8 +84,24 @@ void SteeringController::engageSteering(int32_t input) {
       Serial.println(input);
     }
     currentSteeringUS = input;
+  } */
+  int32_t currentAngle = 1500, threshold = 20;
+  if (abs(currentAngle - input) < threshold) {
+    digitalWrite(7, LOW);
+    digitalWrite(6, LOW);
+    Serial.println("within threshold");
+  } else if (currentAngle > input) {
+    digitalWrite(7, HIGH);
+    digitalWrite(6, LOW);
+    Serial.println("turning left");
+  } else {
+    digitalWrite(7, LOW);
+    digitalWrite(6, HIGH);
+    Serial.println("turning right");
   }
-  Steer_Servo.writeMicroseconds(input);
+
+
+//  Steer_Servo.writeMicroseconds(input);
   delay(1);
 }
 

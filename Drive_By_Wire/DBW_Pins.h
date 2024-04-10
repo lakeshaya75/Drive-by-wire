@@ -1,7 +1,7 @@
 #ifndef _DBW_PINS_
 #define _DBW_PINS_
 
-#define DEBUG false
+#define DEBUG true
 #define USE_PIDS true
 
 #include <Arduino.h>
