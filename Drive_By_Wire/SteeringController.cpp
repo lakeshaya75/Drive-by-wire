@@ -3,6 +3,7 @@
 #include "DBW_Pins.h"
 #include "Settings.h"
 #include "SteeringController.h"
+#include "Vehicle.h"
 
 SteeringController::SteeringController()
   : steerPID(&steerAngleUS, &PIDSteeringOutput_us, &desiredTurn_us, proportional_steering, integral_steering, derivative_steering, DIRECT) {
@@ -72,38 +73,9 @@ void SteeringController::SteeringPID(int32_t input) {
   }
 }
 
-// Outputs a PWM based on input (1ms - 1.85ms)
-void SteeringController::engageSteering(int32_t input) {
-  /*if (input > MAX_TURN_MS)
-    input = MAX_TURN_MS;
-  else if (input < MIN_TURN_MS)
-    input = MIN_TURN_MS;
-  if (currentSteeringUS != input) {
-    if (DEBUG) {
-      Serial.print("MAP Steering: ");
-      Serial.println(input);
-    }
-    currentSteeringUS = input;
-  } */
-  int32_t currentAngle = 1500, threshold = 20;
-  if (abs(currentAngle - input) < threshold) {
-    digitalWrite(7, LOW);
-    digitalWrite(6, LOW);
-    Serial.println("within threshold");
-  } else if (currentAngle > input) {
-    digitalWrite(7, HIGH);
-    digitalWrite(6, LOW);
-    Serial.println("turning left");
-  } else {
-    digitalWrite(7, LOW);
-    digitalWrite(6, HIGH);
-    Serial.println("turning right");
-  }
 
 
-//  Steer_Servo.writeMicroseconds(input);
-  delay(1);
-}
+
 
 // Calculates the angle from left sensor
 int32_t SteeringController::computeAngleLeft() { // issues with sensor
@@ -125,4 +97,36 @@ int32_t SteeringController::computeAngleRight() {
  Serial.println(val);
  } */
   return val;
+}
+
+// Outputs a PWM based on input (1ms - 1.85ms)
+void SteeringController::engageSteering(int32_t input) {
+  /*if (input > MAX_TURN_MS)
+    input = MAX_TURN_MS;
+  else if (input < MIN_TURN_MS)
+    input = MIN_TURN_MS;
+  if (currentSteeringUS != input) {
+    if (DEBUG) {
+      Serial.print("MAP Steering: ");
+      Serial.println(input);
+    }
+    currentSteeringUS = input;
+  } */
+  int32_t currentAngle = currentAngle, threshold = 20;
+  if (abs(currentAngle - input) < threshold) {
+    digitalWrite(7, LOW);
+    digitalWrite(6, LOW);
+    Serial.println("within threshold");
+  } else if (currentAngle > input) {
+    digitalWrite(7, HIGH);
+    digitalWrite(6, LOW);
+    Serial.println("turning left");
+  } else {
+    digitalWrite(7, LOW);
+    digitalWrite(6, HIGH);
+    Serial.println("turning right");
+  }
+
+  //  Steer_Servo.writeMicroseconds(input);
+  delay(1);
 }
