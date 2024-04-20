@@ -53,7 +53,7 @@ Vehicle::Vehicle() {
 
 #if DBWversion < 4
   // Keep trying to initialize CAN
-  while (!CAN.begin(CAN_500KBPS)) {
+  while (0) { // changed to false For testing purposes CAN.begin(CAN_500KBPS) ReEnable for DBWV4
     if (DEBUG) {
       Serial.println("CAN BUS Shield init fail");
     }
@@ -160,18 +160,36 @@ void Vehicle::initalize(){
   Serial.println("card initialized.");
 
   // create a new file
-  char filename[] = "LOGGER00.CSV";
-  for (uint8_t i = 0; i < 100; i++) {
-    filename[6] = i / 10 + '0';
-    filename[7] = i % 10 + '0';
-    if (!SD.exists(filename)) {
-      Serial.print("File does not exist. New file name:");
-      Serial.println(filename);
-      // only open a new file if it doesn't exist
-      logfile = SD.open(filename, FILE_WRITE);
-      break;  // leave the loop!
-    }
-  }
+  char filename[] = "LOGGER_MM_DD_YYYY_HR_MN_SC.CSV";
+
+  filename[7] = tm.Month / 10 + '0';
+  filename[8] = tm.Month % 10 + '0';
+
+  filename[10] = tm.Day / 10 + '0';
+  filename[11] = tm.Day % 10 + '0';
+
+  filename[13] = tmYearToCalendar(tm.Year) / 1000 + '0';
+  filename[14] = (tmYearToCalendar(tm.Year) % 1000) / 100 + '0';
+  filename[15] = (tmYearToCalendar(tm.Year) % 1000) / 10 + '0';
+  filename[16] = tmYearToCalendar(tm.Year) % 10 + '0';
+
+  filename[18] = tm.Hour / 10 + '0';
+  filename[19] = tm.Hour % 10 + '0';
+
+  filename[21] = tm.Minute / 10 + '0';
+  filename[22] = tm.Minute % 10 + '0';
+
+  filename[24] = tm.Second / 10 + '0';
+  filename[25] = tm.Second % 10 + '0';
+
+  int i = 1;
+  do {
+    filename[24] = (tm.Second + i) / 10 + '0';
+    filename[25] = (tm.Second + i) % 10 + '0';
+    i++;
+  } while (SD.exists(filename));
+
+  logfile = SD.open(filename, FILE_WRITE);
 
   if (!logfile) {
     error("file unable to open!");
@@ -181,7 +199,7 @@ void Vehicle::initalize(){
   Serial.println(filename);
 
   // Add a header to the file
-  logfile.print("time_ms,desired_speed_ms,desired_brake,desired_angle,current_speed,current_brake,current_angle,throttle_pulse,steerpulse,brakeHold\n");
+  logfile.print("time_ms,desired_speed_ms,desired_brake,desired_angle,current_speed,current_brake,current_angle,throttle_pulse,steerpulse,brakeHold,steeringVal,steeringAngleRight\n"); // added steeringVal (modification)
   logfile.flush();
 
 }
@@ -407,7 +425,7 @@ void Vehicle::eStop() {
 void Vehicle::updateRC() {
   RC.mapValues();
   throttlePulse_ms=RC.getMappedValue(RC_CH2_THROTTLE_BR);
-  steerPulse_ms=RC.getMappedValue(RC_CH1_STEERING); 
+  steerPulse_ms=RC.getMappedValue(RC_CH1_STEERING); // is wheel angle and not pulse width 
   if (RC.checkValidData()) {
     if (throttlePulse_ms == -1 && brakeHold == 0) {  // Activate brakes
       //Serial.println("24V is on" + String(RC.getMappedValue(RC_CH2_THROTTLE_BR)));
@@ -418,11 +436,13 @@ void Vehicle::updateRC() {
     } else {  // Release brakes
       brakeHold = 0;
       brake.Release();
-      throttle.update(throttlePulse_ms);
+      currentSpeed = throttle.update(throttlePulse_ms);
       //Serial.println(RC.getMappedValue(RC_CH2_THROTTLE_BR));
     }
 
-    steer.update(steerPulse_ms);
+    currentAngle = steer.update(steerPulse_ms);
+    currentRightAngle = steer.computeAngleRight();
+    steeringVal = steer.getSteeringMode();
    // LogMonitor();
     LogSD();
   }
@@ -460,7 +480,11 @@ void Vehicle::LogSD(){
   logfile.print(",");
   logfile.print(steerPulse_ms);
   logfile.print(",");
-  logfile.println(brakeHold);
+  logfile.print(brakeHold);
+  logfile.print(",");
+  logfile.print(steeringVal);
+  logfile.print(",");
+  logfile.println(currentRightAngle);
   logfile.flush();  // Flush the file to make sure data is written immediately
 }
 

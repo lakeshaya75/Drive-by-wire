@@ -84,7 +84,7 @@ int32_t ThrottleController::update(int32_t dSpeed) {
   if (DEBUG)
     Serial.println("mm Speed: " + String(speedCyclometerInput_mmPs));
   //return speedCyclometerInput_mmPs;
-  return dSpeed;
+  return speedCyclometerInput_mmPs;
 }
 
 
