@@ -94,6 +94,8 @@ void RC_Controller::mapThrottleBrake() {
       } else if(pulseWidth >= 1500) {                                                    // throttle
         int throttleValue = map(pulseWidth, 1500, 2000, 0, 120);  // maximum to 120 counts, increase if needed
         RC_VALUES_MAPPED[RC_CH2_THROTTLE_BR] = throttleValue;
+      } else {  // set throttle to 0
+        RC_VALUES_MAPPED[RC_CH2_THROTTLE_BR] = 0;
       }
     }
 

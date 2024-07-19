@@ -183,10 +183,16 @@ void ThrottleController::engageThrottle(int32_t input) {
   }
   */
 
+  int minInput = 0;
+  int maxInput = 255;
+
+  float minVolt = 1.3;
+  float maxVolt = 2.3;
+
   if (DEBUG)
     Serial.println("MAPPED speed: " + String(input));
 
-  if (input != currentThrottlePWM) {
+ /* if (input != currentThrottlePWM) {
     if (input > 255) {
       input = 255;
     } else if (input < 0) {
@@ -196,6 +202,28 @@ void ThrottleController::engageThrottle(int32_t input) {
     noInterrupts();
     write(DAC_CHANNEL, input);
     currentThrottlePWM = input;  // Remember most recent throttle PWM value.
+    interrupts();
+  } */
+
+  int mappedInput = map(input, minInput, maxInput, minVolt * 100, maxVolt * 100);
+
+  // Ensure input is within range
+  if (mappedInput > 255) {
+    mappedInput = 255;
+  } else if (mappedInput < 0) {
+    mappedInput = 0;
+  }
+
+  // if input is 0, reset throttle
+  if (input == 0) {
+    noInterrupts();
+    write(DAC_CHANNEL, 0);
+    currentThrottlePWM = 0;
+    interrupts();
+  } else if (input != currentThrottlePWM) { // only updates if val has changed
+    noInterrupts();
+    write(DAC_CHANNEL, input);
+    currentThrottlePWM = input; // recent PWM throttle value
     interrupts();
   }
 }

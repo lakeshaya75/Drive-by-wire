@@ -1,15 +1,17 @@
 #include "DBW_Pins.h"
 #include <SPI.h>
 #include "Vehicle.h"
-#include <SD.h>
-#include <RTClib.h>
+#include "SD.h"
+#include "RTClib.h"
 #include <Wire.h>
 #include <DS1307RTC.h>
 #include "Can_Protocol.h"
 #include <stdio.h>
 
 #include <Arduino.h>
-#include "DBW_Pins.h"
+
+RTC_DS1307 rtc;
+
 #if DBWversion < 4
 // Only for Arduino Mega
 #include <mcp2515_can.h>     // CAN_BUS_shield library
@@ -24,12 +26,16 @@ tmElements_t tm;
 
 const int chipSelect  = 53; //chipSelect pin for the SD card Reader
 
+// A simple data logger for the Arduino analog pins
+#define LOG_INTERVAL  1000 // mills between entries
+#define ECHO_TO_SERIAL   1 // echo data to serial port
+#define WAIT_TO_START    0 // Wait for serial input in setup()
 
+// Breaks when compiling with due Seems not to be used anywhere in the code
+//RC_Controller Vehicle::RC;
+//Brakes Vehicle::brake;
+//ThrottleController Vehicle::throttle;
 
-RC_Controller Vehicle::RC;
-
-Brakes Vehicle::brake;
-ThrottleController Vehicle::throttle;
 #if DBWversion < 4
 mcp2515_can CAN(CAN_SS_PIN);  // pin for CS on Mega
 #endif
@@ -41,6 +47,7 @@ volatile int16_t Vehicle::desired_angle;
 /****************************************************************************
    Constructor
  ****************************************************************************/
+ 
 Vehicle::Vehicle() {
   // Intialize default values
   currentSpeed = 0;
@@ -53,7 +60,7 @@ Vehicle::Vehicle() {
 
 #if DBWversion < 4
   // Keep trying to initialize CAN
-  while (0) { // changed to false For testing purposes CAN.begin(CAN_500KBPS) ReEnable for DBWV4
+  while (!CAN.begin(CAN_500KBPS)) { // changed to false For testing purposes CAN.begin(CAN_500KBPS) ReEnable for DBWV4
     if (DEBUG) {
       Serial.println("CAN BUS Shield init fail");
     }
@@ -61,15 +68,13 @@ Vehicle::Vehicle() {
   }
   if (DEBUG)
     Serial.println("CAN BUS init ok!");
-
 #else  // Due
-  if (!Can0.begin(CAN_BPS_500K))  // initalize CAN with 500kbps baud rate
+ if (Can0.begin(CAN_BPS_500K,255))  // initalize CAN with 500kbps baud rate and no enable pins 
   {
     Serial.println("Can0 init success");
   } else {
     Serial.println("Can0 init failed");
   }
-
 #endif  // DBWversion
   //attachPCINT(digitalPinToPCINT(IRPT_ESTOP_PIN), eStop, RISING);
   //attachPCINT(digitalPinToPCINT(IRPT_CAN_PIN), recieveCan, RISING);
@@ -89,10 +94,75 @@ Initilze SD Card
 ******************/ 
 
 void Vehicle::initalize(){
+  delay(100);
+  #if DBWversion > 3
+    /*
+    #define GPSSerial Serial1
+    Adafruit_GPS GPS(&GPSSerial);
+    
+    // initialize the GPS
+    GPS.begin(9600);
+    GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
+    GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // setting the update rate to 1 hz
+    delay(1000);
+    Serial.println("GPS has been initialized");
+   
+    long gpsStart = micros();
+    
+    char c = GPS.read();
+    while((micros() - gpsStart) <= 2000000)
+    {
+      if(GPS.newNMEAreceived()) {
+        GPS.parse(GPS.lastNMEA());
+        
+      }
+      GPS.read();
+      
+    
+      //Serial.print(GPS.lastNMEA());
+    }
+    
+    
+    Serial.print("Compile Date: ");
+    Serial.println(__DATE__);
+    Serial.print("Compile Time: ");
+    Serial.println(__TIME__);
+    Serial.print("\nDate: ");
+    Serial.print((GPS.day<10)?"0":"");
+    Serial.print(GPS.day, DEC);              //DD
+    Serial.print("/");
+    Serial.print((GPS.month<10)?"0":""); 
+    Serial.print(GPS.month, DEC);            //MM
+    Serial.print("/20");
+    Serial.println(GPS.year, DEC);           //YYYY
+
+    Serial.print("\nTime: ");
+    if (GPS.hour < 10) { Serial.print('0'); }
+    Serial.print(GPS.hour, DEC); Serial.print(':');
+    if (GPS.minute < 10) { Serial.print('0'); }
+    Serial.print(GPS.minute, DEC); Serial.print(':');
+    if (GPS.seconds < 10) { Serial.print('0'); }
+    Serial.print(GPS.seconds, DEC); Serial.print('.');
+    if (GPS.milliseconds < 10) {
+      Serial.print("00");
+    } else if (GPS.milliseconds > 9 && GPS.milliseconds < 100) {
+      Serial.print("0");
+    }
+    Serial.println("\n");
+    /* Serial.println(GPS.milliseconds);
+    Serial.print("Date: ");
+    Serial.print(GPS.day, DEC); Serial.print('/');
+    Serial.print(GPS.month, DEC); Serial.print("/20");
+    Serial.println(GPS.year, DEC); */
+    
+  #else
+  
+  initializeRTC();
   bool parse=false;
   bool config=false;
 
   // get the date and time the compiler was run
+  
   if (getDate(__DATE__) && getTime(__TIME__)) {
     parse = true;
     // and configure the RTC with this info
@@ -141,9 +211,11 @@ void Vehicle::initalize(){
     }
     //delay(9000);
   }
+#endif
  // delay(2000);
 
-
+//#if DBWversion < 4
+// SPI pins on due need to soldered to the shield pins in order to log
 // initialize the SD card
   Serial.print("Initializing SD card...");
 
@@ -158,38 +230,40 @@ void Vehicle::initalize(){
     return;
   }
   Serial.println("card initialized.");
+//#endif 
 
   // create a new file
-  char filename[] = "LOGGER_MM_DD_YYYY_HR_MN_SC.CSV";
+  
+  char filename[] = "LOGGER00.CSV";
+  for (uint8_t i = 0; i < 100; i++) {
+    filename[6] = i / 10 + '0';
+    filename[7] = i % 10 + '0';
+    if (!SD.exists(filename)) {
+      Serial.print("File does not exist. New file name:");
+      Serial.println(filename);
+      // only open a new file if it doesn't exist
+      logfile = SD.open(filename, FILE_WRITE);
+      break;  // leave the loop!
+    }
+  }
+   // create a new file
+//#if DBWversion < 4
+ /* char filename[] = "MM_DD_00.CSV";
 
-  filename[7] = tm.Month / 10 + '0';
-  filename[8] = tm.Month % 10 + '0';
+  filename[0] = tm.Month / 10 + '0';
+  filename[1] = tm.Month % 10 + '0';
 
-  filename[10] = tm.Day / 10 + '0';
-  filename[11] = tm.Day % 10 + '0';
-
-  filename[13] = tmYearToCalendar(tm.Year) / 1000 + '0';
-  filename[14] = (tmYearToCalendar(tm.Year) % 1000) / 100 + '0';
-  filename[15] = (tmYearToCalendar(tm.Year) % 1000) / 10 + '0';
-  filename[16] = tmYearToCalendar(tm.Year) % 10 + '0';
-
-  filename[18] = tm.Hour / 10 + '0';
-  filename[19] = tm.Hour % 10 + '0';
-
-  filename[21] = tm.Minute / 10 + '0';
-  filename[22] = tm.Minute % 10 + '0';
-
-  filename[24] = tm.Second / 10 + '0';
-  filename[25] = tm.Second % 10 + '0';
+  filename[3] = tm.Day / 10 + '0';
+  filename[4] = tm.Day % 10 + '0';
 
   int i = 1;
   do {
-    filename[24] = (tm.Second + i) / 10 + '0';
-    filename[25] = (tm.Second + i) % 10 + '0';
+    //file number 27-28
+    filename[6] = i / 10 + '0';
+    filename[7] = i % 10 + '0';
     i++;
-  } while (SD.exists(filename));
-
-  logfile = SD.open(filename, FILE_WRITE);
+  } while (SD.exists(filename) && (i < 100));
+  logfile = SD.open(filename, FILE_WRITE); */
 
   if (!logfile) {
     error("file unable to open!");
@@ -201,7 +275,7 @@ void Vehicle::initalize(){
   // Add a header to the file
   logfile.print("time_ms,desired_speed_ms,desired_brake,desired_angle,current_speed,current_brake,current_angle,throttle_pulse,steerpulse,brakeHold,steeringVal,steeringAngleRight\n"); // added steeringVal (modification)
   logfile.flush();
-
+//#endif
 }
 
 /*****************************************************************************
@@ -264,10 +338,10 @@ void Vehicle::update() {
     }
   }
 #else  // Due
-  outgoing.data.int16[0] = MSG.sspeed;
-  outgoing.data.int16[1] = MSG.brake;
-  outgoing.data.int16[2] = MSG.angle;
-  outgoing.data.int16[3] = MSG.reserved;
+  outgoing.data.s0 = MSG.sspeed;
+  outgoing.data.s1 = MSG.brake;
+  outgoing.data.s2 = MSG.angle;
+  outgoing.data.s3 = MSG.reserved;
   Can0.sendFrame(outgoing);
 
   if (DEBUG) {
@@ -374,12 +448,12 @@ void Vehicle::recieveCan() {  //need to ADD ALL the other CAN IDs possible (RC i
     }
 
     // SPEED IN mm/s
-    int16_t low_result = incoming.data.int16[0];
+    int16_t low_result = incoming.data.s0;
     desired_speed_mmPs = low_result;
 
 
     // BRAKE ON/OFF
-    int16_t mid_result = incoming.data.int16[1];
+    int16_t mid_result = incoming.data.s1;
     desired_brake = mid_result;
     if (desired_brake > 0 && brakeHold == 0) {  // Activate Brakes
       eStop();
@@ -391,7 +465,7 @@ void Vehicle::recieveCan() {  //need to ADD ALL the other CAN IDs possible (RC i
     }
 
     // WHEEL ANGLE
-    int16_t high_result = incoming.data.int16[2];
+    int16_t high_result = incoming.data.s2;
     desired_angle = high_result;
 
     if (DEBUG) {
@@ -436,7 +510,7 @@ void Vehicle::updateRC() {
     } else {  // Release brakes
       brakeHold = 0;
       brake.Release();
-      currentSpeed = throttle.update(throttlePulse_ms);
+      throttle.update(throttlePulse_ms);
       //Serial.println(RC.getMappedValue(RC_CH2_THROTTLE_BR));
     }
 
@@ -444,7 +518,9 @@ void Vehicle::updateRC() {
     currentRightAngle = steer.computeAngleRight();
     steeringVal = steer.getSteeringMode();
    // LogMonitor();
+   #if DBWversion <4 // Current DUE board layout does not support logging
     LogSD();
+   #endif
   }
   RC.clearFlag();
 }
@@ -460,8 +536,80 @@ void Vehicle::LogMonitor() {
   //Serial.print(steerPulse_ms);  
 }
 
+void Vehicle::initializeRTC() {
+  bool parse = false;
+
+  // get the date and time the compiler was run
+  if (getDate(__DATE__) && getTime(__TIME__)) {
+    parse = true;
+    // and configure the RTC with this info
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
+
+  if (parse) {
+    Serial.print("DS1307 configured Time=");
+    Serial.print(__TIME__);
+    Serial.print(", Date=");
+    Serial.println(__DATE__);
+  } else {
+    Serial.print("Could not parse info from the compiler, Time=\"");
+    Serial.print(__TIME__);
+    Serial.print("\", Date=\"");
+    Serial.print(__DATE__);
+    Serial.println("\"");
+  }
+}
+
+
+
 void Vehicle::LogSD(){
+
+  DateTime now;
+
+  // delay for the amount of time we want between readings
+  delay((LOG_INTERVAL -1) - (millis() % LOG_INTERVAL));
+
+  // log milliseconds since starting
+  uint32_t m = millis();
+  logfile.print(m);           // milliseconds since start
+  logfile.print(", ");    
+#if ECHO_TO_SERIAL
+  Serial.print(m);         // milliseconds since start
+  Serial.print(", ");  
+#endif
  // Log data to the file
+ #if DBWversion < 4
+ // fetch the time
+  now = rtc.now();
+  // log time
+  logfile.print(now.secondstime()); // seconds since 2000
+  logfile.print(", ");
+  logfile.print(now.year(), DEC);
+  logfile.print("/");
+  logfile.print(now.month(), DEC);
+  logfile.print("/");
+  logfile.print(now.day(), DEC);
+  logfile.print(" ");
+  logfile.print(now.hour(), DEC);
+  logfile.print(":");
+  logfile.print(now.minute(), DEC);
+  logfile.print(":");
+  logfile.print(now.second(), DEC);
+#if ECHO_TO_SERIAL
+  Serial.print(now.secondstime()); // seconds since 2000
+  Serial.print(", ");
+  Serial.print(now.year(), DEC);
+  Serial.print("/");
+  Serial.print(now.month(), DEC);
+  Serial.print("/");
+  Serial.print(now.day(), DEC);
+  Serial.print(" ");
+  Serial.print(now.hour(), DEC);
+  Serial.print(":");
+  Serial.print(now.minute(), DEC);
+  Serial.print(":");
+  Serial.print(now.second(), DEC);
+#endif //ECHO_TO_SERIAL
   logfile.print(millis());
   logfile.print(",");
   logfile.print(desired_speed_mmPs);
@@ -486,6 +634,7 @@ void Vehicle::LogSD(){
   logfile.print(",");
   logfile.println(currentRightAngle);
   logfile.flush();  // Flush the file to make sure data is written immediately
+#endif
 }
 
 void Vehicle::error(char *str)
@@ -521,17 +670,17 @@ bool Vehicle::getTime(const char *str)
 
 bool Vehicle::getDate(const char *str)
 {
-  char Month[12];
-  int Day, Year;
-  uint8_t monthIndex;
+    char Month[12];
+    int Day, Year;
+    uint8_t monthIndex;
 
-  if (sscanf(str, "%s %d %d", Month, &Day, &Year) != 3) return false;
-  for (monthIndex = 0; monthIndex < 12; monthIndex++) {
-    if (strcmp(Month, monthName[monthIndex]) == 0) break;
-  }
-  if (monthIndex >= 12) return false;
-  tm.Day = Day;
-  tm.Month = monthIndex + 1;
-  tm.Year = CalendarYrToTm(Year);
+    if (sscanf(str, "%s %d %d", Month, &Day, &Year) != 3) return false;
+    for (monthIndex = 0; monthIndex < 12; monthIndex++) {
+      if (strcmp(Month, monthName[monthIndex]) == 0) break;
+    }
+    if (monthIndex >= 12) return false;
+    tm.Day = Day;
+    tm.Month = monthIndex + 1;
+    tm.Year = CalendarYrToTm(Year);
   return true;
 }

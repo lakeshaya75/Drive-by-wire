@@ -2,7 +2,7 @@
 #define _DBW_PINS_
 
 #define DEBUG true
-#define USE_PIDS false
+#define USE_PIDS true
 
 #include <Arduino.h>
 
@@ -37,8 +37,8 @@
 // Relay that turns on power to the steering system
 #define STEER_ON_PIN        8
 // Wheel angle sensors mounted on left and right steering columns
-#define L_SENSE_PIN    A2
-#define R_SENSE_PIN    A3
+#define L_SENSE_PIN    7
+#define R_SENSE_PIN    6
 
 // Command to e-bike controller to use regenerative braking; not used 
 #define REGEN_PIN          22

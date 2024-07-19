@@ -19,6 +19,7 @@ class SteeringController {
 public:
   SteeringController();
   ~SteeringController();
+  void steeringLimitsTest();
   int32_t update(int32_t desiredAngle);
   int16_t getSteeringMode();
    int32_t computeAngleRight();

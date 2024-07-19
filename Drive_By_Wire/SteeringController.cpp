@@ -4,6 +4,8 @@
 #include "Settings.h"
 #include "SteeringController.h"
 
+const int steeringPin = 3;
+
 SteeringController::SteeringController()
   : steerPID(&steerAngleUS, &PIDSteeringOutput_us, &desiredTurn_us, proportional_steering, integral_steering, derivative_steering, DIRECT) {
   //Hacky fix for not burning servo circuit
@@ -24,9 +26,32 @@ SteeringController::SteeringController()
   if (DEBUG) {
     Serial.println("Steering Setup Complete");
   }
+
+  steeringLimitsTest();
 }
 
 SteeringController::~SteeringController() {
+}
+
+void SteeringController::steeringLimitsTest() {
+  Serial.println("Begin testing steering limits...");
+
+  // read sensor from left limit
+  Steer_Servo.writeMicroseconds(MIN_TURN_MS);
+  delay(1000);
+  int32_t leftLimit = analogRead(L_SENSE_PIN);
+  Serial.println("Left limit: " + leftLimit);
+
+  // read sensor from right limit
+  Steer_Servo.writeMicroseconds(MAX_TURN_MS);
+  delay(1000);
+  int32_t rightLimit = analogRead(R_SENSE_PIN);
+  Serial.println("Right limit: " + rightLimit);
+
+  /* Steer_Servo.writeMicroseconds((MIN_TURN_MS + MAX_TURN_MS) / 2);
+  delay(1000); */ // this code is if we want to move to center
+
+  Serial.println("Testing for steering limits complete.");
 }
 
 /** 
