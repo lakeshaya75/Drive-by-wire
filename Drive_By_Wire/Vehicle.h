@@ -8,6 +8,7 @@
 #include <SD.h>
 #include <stdio.h>
 #include "DBW_Pins.h"
+#include <Adafruit_GPS.h>
 
 #if DBWversion >= 4
 // Only for Arduino Due
@@ -46,7 +47,6 @@ File logfile;
   int16_t steeringVal; // new val
   void recieveCan();
   void initalize(); 
-  void initializeRTC();
   void error(char *str);
   void print2digits(int number);
   bool getTime(const char *str);
