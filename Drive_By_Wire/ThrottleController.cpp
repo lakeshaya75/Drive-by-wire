@@ -17,7 +17,7 @@ ThrottleController::ThrottleController()
   calcTime_ms[0] = 0;
   calcTime_ms[1] = 0;
   prevSpeed_mmPs = 0;
-
+  timeSinceStartup = 0;
 #if DBWversion < 4
   // Only for Arduino Mega
   pinMode(DAC_SS_PIN, OUTPUT);
@@ -78,6 +78,7 @@ int32_t ThrottleController::update(int32_t dSpeed) {
 
   if (DEBUG) {
     Serial.print("PWM speed: ");
+    Serial.flush();
     Serial.println(currentThrottlePWM);
   }
   computeSpeed();
@@ -183,14 +184,9 @@ void ThrottleController::engageThrottle(int32_t input) {
   }
   */
 
-  int minInput = 0;
-  int maxInput = 255;
-
-  float minVolt = 1.3;
-  float maxVolt = 2.3;
-
   if (DEBUG)
     Serial.println("MAPPED speed: " + String(input));
+    Serial.flush();
 
  /* if (input != currentThrottlePWM) {
     if (input > 255) {
@@ -205,13 +201,11 @@ void ThrottleController::engageThrottle(int32_t input) {
     interrupts();
   } */
 
-  int mappedInput = map(input, minInput, maxInput, minVolt * 100, maxVolt * 100);
-
   // Ensure input is within range
-  if (mappedInput > 255) {
-    mappedInput = 255;
-  } else if (mappedInput < 0) {
-    mappedInput = 0;
+  if (input > 255) {
+    input = 255;
+  } else if (input < 0) {
+    input = 0;
   }
 
   // if input is 0, reset throttle
@@ -219,11 +213,22 @@ void ThrottleController::engageThrottle(int32_t input) {
     noInterrupts();
     write(DAC_CHANNEL, 0);
     currentThrottlePWM = 0;
+    startup = false;
+    timeSinceStartup = 0;
     interrupts();
-  } else if (input != currentThrottlePWM) { // only updates if val has changed
+  } else if ((input != currentThrottlePWM) && (startup == true) && ( (millis() - timeSinceStartup) > 250 )) { // only updates if val has changed
     noInterrupts();
     write(DAC_CHANNEL, input);
     currentThrottlePWM = input; // recent PWM throttle value
+    interrupts();
+  }
+  else if((startup == false) && (timeSinceStartup == 0))
+  {
+    noInterrupts();
+    write(DAC_CHANNEL, 255);
+    currentThrottlePWM = 255 ; // recent PWM throttle value
+    startup = true;
+    timeSinceStartup = millis();
     interrupts();
   }
 }

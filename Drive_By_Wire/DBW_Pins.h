@@ -2,12 +2,12 @@
 #define _DBW_PINS_
 
 #define DEBUG true
-#define USE_PIDS true
+#define USE_PIDS false // throttle currently uses a PID controller, Steering does not current use a PID controller
 
 #include <Arduino.h>
 
 //Version can be 1,3 or 4; LLB = Low Level Board = Drive By Wire
-#define DBWversion 3
+#define DBWversion 4
 
 /*---------- Version 1 - No Longer supported------------------------
 #if DBWversion == 1
@@ -37,8 +37,8 @@
 // Relay that turns on power to the steering system
 #define STEER_ON_PIN        8
 // Wheel angle sensors mounted on left and right steering columns
-#define L_SENSE_PIN    7
-#define R_SENSE_PIN    6
+#define L_SENSE_PIN    A2
+#define R_SENSE_PIN    A3
 
 // Command to e-bike controller to use regenerative braking; not used 
 #define REGEN_PIN          22
@@ -142,7 +142,7 @@
 // Pin used to steer the vehicle with a pulse
 #define STEER_PULSE_PIN     26
 // Relay that turns on power to the steering system
-#define STEER_ON_PIN        D28
+#define STEER_ON_PIN        28
 // Debug or status for DBW
 #define DBW_LED             30
  // keep-alive watchdog is not yet implemented
@@ -151,7 +151,7 @@
 // Switch to drive in forward or reverse; not used
 #define FWDSW_PIN          36
 #define BUZZER_PIN         38  // Not used
-#define BrakeOnPin         39
+#define BrakeOnPin         44
 // Brakes, have relays for both on/off as well as selecting 12/24v power.
 #define BrakeVoltPin       40
 

@@ -26,6 +26,7 @@ Brakes::Brakes() {
 void Brakes::Release() {
   if (DEBUG)
     Serial.println("RELEASE BRAKE");
+    Serial.flush();
 
   // Release the brakes, state is BR_OFF
   digitalWrite(BrakeOnPin, RELAYInversion ? HIGH : LOW);
