@@ -4,8 +4,6 @@
 #include "Settings.h"
 #include "SteeringController.h"
 
-const int steeringPin = 3;
-
 SteeringController::SteeringController()
   : steerPID(&steerAngleUS, &PIDSteeringOutput_us, &desiredTurn_us, proportional_steering, integral_steering, derivative_steering, DIRECT) {
   //Hacky fix for not burning servo circuit
@@ -26,32 +24,9 @@ SteeringController::SteeringController()
   if (DEBUG) {
     Serial.println("Steering Setup Complete");
   }
-
-  steeringLimitsTest();
 }
 
 SteeringController::~SteeringController() {
-}
-
-void SteeringController::steeringLimitsTest() {
-  Serial.println("Begin testing steering limits...");
-
-  // read sensor from left limit
-  Steer_Servo.writeMicroseconds(MIN_TURN_MS);
-  delay(1000);
-  int32_t leftLimit = analogRead(L_SENSE_PIN);
-  Serial.println("Left limit: " + leftLimit);
-
-  // read sensor from right limit
-  Steer_Servo.writeMicroseconds(MAX_TURN_MS);
-  delay(1000);
-  int32_t rightLimit = analogRead(R_SENSE_PIN);
-  Serial.println("Right limit: " + rightLimit);
-
-  /* Steer_Servo.writeMicroseconds((MIN_TURN_MS + MAX_TURN_MS) / 2);
-  delay(1000); */ // this code is if we want to move to center
-
-  Serial.println("Testing for steering limits complete.");
 }
 
 /** 
@@ -86,11 +61,11 @@ int32_t SteeringController::update(int32_t desiredAngle) {
     //mappedAngle = map(desiredAngle, 722, 639, 1500, MAX_TURN_MS);
   //}
 
-  if (USE_PIDS) {
-    SteeringPID(mappedAngle);
-  } else {
+  //if (USE_PIDS) {
+    //SteeringPID(mappedAngle);
+  //} else {
     engageSteering(mappedAngle); 
-  }
+  //}
   
   delay(1);
 
@@ -129,15 +104,16 @@ void SteeringController::engageSteering(int32_t input) {
     digitalWrite(7, LOW);
     digitalWrite(6, LOW);
     steeringMode = 0; // changes here
-  } else if (input > currentAngle) {// left turn
-    digitalWrite(7, HIGH);
-    digitalWrite(6, LOW);
-    steeringMode = 1;
-  } else {//right turn
+  } else if (input > currentAngle) {// left turn 
     digitalWrite(7, LOW);
     digitalWrite(6, HIGH);
+    steeringMode = 1;
+  } else {//right turn
+    digitalWrite(7, HIGH);
+    digitalWrite(6, LOW);
     steeringMode = -1;
   }
+  
   Serial.print("Steering Mode: ");
   Serial.println(steeringMode);
 
@@ -148,7 +124,7 @@ void SteeringController::engageSteering(int32_t input) {
 
 // Calculates the angle from left sensor
 int32_t SteeringController::computeAngleLeft() { // issues with sensor
-  int32_t val = analogRead(L_SENSE_PIN);
+  int32_t val = analogRead(R_SENSE_PIN);// change for final version 
  // val = map(val, Left_Read_at_MIN_TURN, Left_Read_at_MAX_TURN, MIN_TURN_MS, MAX_TURN_MS);
   if(DEBUG){
     Serial.print("Left sensor: ");
