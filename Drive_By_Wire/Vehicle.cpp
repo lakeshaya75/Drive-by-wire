@@ -94,16 +94,46 @@ Initilze SD Card
 
 void Vehicle::initalize(){
 
+#if DBWversion == 4
   if (!rtc.begin()) {
     Serial.println("Couldn't find RTC");
     Serial.flush();
     while (1) delay(10);
   }
 
+  getDate(__DATE__);
+  getTime(__TIME__);
+
+  
+  if(rtc.lostPower() || (tmYearToCalendar(tm.Year) > rtc.now().year()) || ((tmYearToCalendar(tm.Year) == rtc.now().year()) && tm.Month > rtc.now().month()) || ((tmYearToCalendar(tm.Year) == rtc.now().year()) && (tm.Month == rtc.now().month())  && (tm.Day > rtc.now().day()))
+  || ((tmYearToCalendar(tm.Year) == rtc.now().year()) && (tm.Month == rtc.now().month())  && (tm.Day == rtc.now().day()) && (tm.Hour > rtc.now().hour())) 
+  || ((tmYearToCalendar(tm.Year) == rtc.now().year()) && (tm.Month == rtc.now().month())  && (tm.Day == rtc.now().day()) && (tm.Hour == rtc.now().hour()) && (tm.Minute > rtc.now().minute())))
+  {
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   Serial.println("RTC time set to compile time.");
-
   rtc.start();
+  }
+  
+
+  Serial.print(rtc.now().year());
+  Serial.print('/');
+  Serial.print(rtc.now().month());
+  Serial.print('/');
+  Serial.print(rtc.now().day());
+  Serial.print(" (");
+  Serial.print(daysOfTheWeek[rtc.now().dayOfTheWeek()]);
+  Serial.print(") ");
+  Serial.print(rtc.now().hour() );
+  Serial.print(':');
+  Serial.print(rtc.now().minute() );
+  Serial.print(':');
+  Serial.print(rtc.now().second());
+  if (rtc.now().twelveHour() > 0) {
+    Serial.print(" PM");
+  } else {
+    Serial.print(" AM");
+  }
+  Serial.println();
 
   float drift = 43; // seconds plus or minus over oservation period - set to 0 to cancel previous calibration.
   float period_sec = (7 * 86400);  // total obsevation period in seconds (86400 = seconds in 1 day:  7 days = (7 * 86400) seconds )
@@ -117,12 +147,13 @@ void Vehicle::initalize(){
   Serial.print("Offset is "); 
   Serial.println(offset); // Print to control offset
   Serial.flush();
+#endif 
 
 #if DBWversion < 4
   bool parse=false;
   bool config=false;
 
-  // get the date and time the compiler was run
+  // get the date and time the compiler was run 
   
   if (getDate(__DATE__) && getTime(__TIME__)) {
     parse = true;
@@ -163,19 +194,7 @@ void Vehicle::initalize(){
     Serial.write('/');
     Serial.print(tmYearToCalendar(tm.Year));
     Serial.println();
-  } else {
-   /* if (RTC.chipPresent()) {
-      Serial.println("The DS1307 is stopped.  Please run the SetTime");
-      Serial.println("example to initialize the time and begin running.");
-      Serial.println();
-    } else {
-      Serial.println("DS1307 read error!  Please check the circuitry.");
-      Serial.println();
-    } */ // not needed after new PCF8523
-    //delay(9000);
-  }
-
- // delay(2000);
+  } 
 
 #endif
 // SPI pins on due need to soldered to the shield pins in order to log
@@ -195,22 +214,7 @@ void Vehicle::initalize(){
   Serial.println("card initialized.");
 
 
-  // create a new file
   
-  /*char filename[] = "LOGGER00.CSV";
-  for (uint8_t i = 0; i < 100; i++) {
-    filename[6] = i / 10 + '0';
-    filename[7] = i % 10 + '0';
-    if (!SD.exists(filename)) {
-      Serial.print("File does not exist. New file name:");
-      Serial.println(filename);
-      // only open a new file if it doesn't exist
-      logfile = SD.open(filename, FILE_WRITE);
-      break;  // leave the loop!
-    }
-  }
-  */
-   // create a new file
 
   char filename[] = "MM_DD_00.CSV";
   
@@ -237,6 +241,35 @@ void Vehicle::initalize(){
 
   Serial.print("Logging to: ");
   Serial.println(filename);
+
+  Serial.flush();
+
+  DateTime now;
+  now = rtc.now();
+
+  logfile.print(now.year(), DEC);
+  logfile.print('/');
+  logfile.print(now.month() / 10, DEC);  logfile.print(now.month() % 10, DEC);
+  logfile.print('/');
+  logfile.print(now.day() / 10, DEC);  logfile.print(now.day() % 10, DEC);
+  logfile.print(" (");
+  logfile.print(daysOfTheWeek[now.dayOfTheWeek()]);
+  logfile.print(") ");
+  logfile.print((now.hour() % 12) / 10, DEC);  logfile.print((now.hour() % 12) % 10, DEC);
+  logfile.print(':');
+  logfile.print(now.minute() / 10, DEC);  logfile.print(now.minute() % 10, DEC);
+  logfile.print(':');
+  logfile.print(now.second() / 10, DEC);  logfile.print(now.second() % 10, DEC);
+  if (now.twelveHour() > 0) {
+    logfile.print(" PM");
+  } else {
+    logfile.print(" AM");
+  }
+  logfile.println();
+
+  logfile.print("epoch_time_s,time_ms,desired_speed_ms,desired_brake,desired_angle,current_speed,current_brake,current_angle,throttle_pulse,steerpulse,brakeHold,steeringVal,steeringAngleRight\n"); // added steeringVal (modification)
+  logfile.flush();
+  
 }
 
 /*****************************************************************************
@@ -461,10 +494,13 @@ void Vehicle::updateRC() {
   RC.mapValues();
   throttlePulse_ms=RC.getMappedValue(RC_CH2_THROTTLE_BR);
   steerPulse_ms=RC.getMappedValue(RC_CH1_STEERING); // is wheel angle and not pulse width 
+  estopPulse_ms = RC.getMappedValue(RC_CH3_ESTOP);
   if (RC.checkValidData()) {
-    if (throttlePulse_ms == -1 && brakeHold == 0) {  // Activate brakes
-      //Serial.println("24V is on" + String(RC.getMappedValue(RC_CH2_THROTTLE_BR)));
+    if (estopPulse_ms == 1) {
       eStop();
+    } else if (throttlePulse_ms == -1 && brakeHold == 0) {  // Activate brakes
+      brake.Stop();
+      brakeHold = 1;
     } else if (throttlePulse_ms == -1 && brakeHold == 1) {  // Hold brakes
       //Serial.println("Brake is on" + String(RC.getMappedValue(RC_CH2_THROTTLE_BR)));
       brake.Update();
@@ -505,55 +541,7 @@ void Vehicle::LogMonitor() {
 
 void Vehicle::LogSD(){
   DateTime now;
-
-  rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   now = rtc.now();
-  Serial.print("Milliseconds: "); Serial.println(millis());
-  Serial.print("Epoch time: "); Serial.println(now.unixtime());
-  Serial.print(now.year(), DEC);
-  Serial.print('/');
-  Serial.print(now.month() / 10, DEC);  Serial.print(now.month() % 10, DEC);
-  Serial.print('/');
-  Serial.print(now.day() / 10, DEC);  Serial.print(now.day() % 10, DEC);
-  Serial.print(" (");
-  Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);
-  Serial.print(") ");
-  Serial.print((now.hour() % 12) / 10, DEC);  Serial.print((now.hour() % 12) % 10, DEC);
-  Serial.print(':');
-  Serial.print(now.minute() / 10, DEC);  Serial.print(now.minute() % 10, DEC);
-  Serial.print(':');
-  Serial.print(now.second() / 10, DEC);  Serial.print(now.second() % 10, DEC);
-  if (now.twelveHour() > 0) {
-    Serial.print(" PM");
-  } else {
-    Serial.print(" AM");
-  }
-  
-  Serial.flush();
-
-  logfile.print(now.year(), DEC);
-  logfile.print('/');
-  logfile.print(now.month() / 10, DEC);  logfile.print(now.month() % 10, DEC);
-  logfile.print('/');
-  logfile.print(now.day() / 10, DEC);  logfile.print(now.day() % 10, DEC);
-  logfile.print(" (");
-  logfile.print(daysOfTheWeek[now.dayOfTheWeek()]);
-  logfile.print(") ");
-  logfile.print((now.hour() % 12) / 10, DEC);  logfile.print((now.hour() % 12) % 10, DEC);
-  logfile.print(':');
-  logfile.print(now.minute() / 10, DEC);  logfile.print(now.minute() % 10, DEC);
-  logfile.print(':');
-  logfile.print(now.second() / 10, DEC);  logfile.print(now.second() % 10, DEC);
-  if (now.twelveHour() > 0) {
-    logfile.print(" PM");
-  } else {
-    logfile.print(" AM");
-  }
-  logfile.println();
-
-  logfile.print("epoch_time_s,time_ms,desired_speed_ms,desired_brake,desired_angle,current_speed,current_brake,current_angle,throttle_pulse,steerpulse,brakeHold,steeringVal,steeringAngleRight\n"); // added steeringVal (modification)
-  logfile.flush();
-
   logfile.print(now.unixtime());
   logfile.print(",");
   logfile.print(millis());

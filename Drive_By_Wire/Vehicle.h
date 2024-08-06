@@ -44,6 +44,7 @@ File logfile;
   int brakeHold; // Hold brakes with 12V 
   long throttlePulse_ms;
   long steerPulse_ms;
+  long estopPulse_ms;
   int16_t steeringVal; // new val
   void recieveCan();
   void initalize(); 

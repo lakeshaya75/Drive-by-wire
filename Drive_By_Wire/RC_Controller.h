@@ -6,6 +6,7 @@
 // RC Channels
 #define RC_CH1_STEERING 0  
 #define RC_CH2_THROTTLE_BR 1  
+#define RC_CH3_ESTOP 2
 
 // Channel Pins on RC
 #if DBWversion == 3
@@ -14,6 +15,7 @@
 #else  // Due
 #define STEERING_CH1_PIN 48
 #define THROTTLE_BR_CH2_PIN 46  
+#define ESTOP_CH3_PIN 41
 #endif
 
 class RC_Controller {
@@ -29,8 +31,10 @@ private:
 
   long prevSteering;
   long prevThrottleBrake;
+  long prevEStop;
   int throttleBrakeFlag; // check valid throttle/brake data
   int steeringFlag; // check valid steering data
+  int estopFlag;
 
 public:
   RC_Controller();
@@ -40,9 +44,12 @@ public:
   void mapValues();
   void mapSteering();
   void mapThrottleBrake();
+  void mapEStop();
   static void ISR_STEERING_RISE();
   static void ISR_STEERING_FALL();
   static void ISR_THROTTLE_RISE();
   static void ISR_THROTTLE_FALL();
+  static void ISR_ESTOP_RISE();
+  static void ISR_ESTOP_FALL();
   long getMappedValue(int channel);
 };

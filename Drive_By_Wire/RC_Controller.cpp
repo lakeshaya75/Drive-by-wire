@@ -14,6 +14,7 @@ RC_Controller::RC_Controller() {
   // Setup input for RC reciever
   pinMode(STEERING_CH1_PIN, INPUT);
   pinMode(THROTTLE_BR_CH2_PIN, INPUT);
+  pinMode(ESTOP_CH3_PIN, INPUT);
 
   // Interrupts to pins and ISR functions
   attachInterrupt(digitalPinToInterrupt(STEERING_CH1_PIN), ISR_STEERING_RISE, RISING);
@@ -39,6 +40,7 @@ long RC_Controller::getMappedValue(int channel) {
 void RC_Controller::mapValues() {
   mapThrottleBrake();
   mapSteering();
+  mapEStop();
 }
 
 // Maps value into steering
@@ -112,6 +114,44 @@ void RC_Controller::mapThrottleBrake() {
   }
 }
 
+// Maps values for the knob for the eStop
+void RC_Controller::mapEStop() {
+  unsigned long currentTime = micros();
+
+  // filtering pulse width at next period cycle (~16.6ms)
+  if (currentTime - previousTime[RC_CH3_ESTOP] >= 16600) {
+
+    long pulseWidth = RC_ELAPSED[RC_CH3_ESTOP];
+    if (pulseWidth < 1000 || pulseWidth > 2000) {  // invalid data, out of range
+      return;
+    }
+
+    // filter pulse widths
+    if (prevEStop == pulseWidth) {
+      if (pulseWidth < 1100) {  // brakes
+        RC_VALUES_MAPPED[RC_CH3_ESTOP] = -1;
+        Serial.println("EStop:" + String(pulseWidth));
+      } else if(pulseWidth >= 1500) {  
+        int estopValue;    
+            
+                                                  // throttle
+        estopValue = map(pulseWidth, 1500, 2000, 0, 120);  // maximum to 120 counts, increase if needed 
+        
+        RC_VALUES_MAPPED[RC_CH3_ESTOP] = estopValue;
+      } else {  // set throttle to 0
+        RC_VALUES_MAPPED[RC_CH3_ESTOP] = 0;
+      }
+    }
+
+    Serial.println("EStop:" + String(pulseWidth));
+    //Serial.println(RC_VALUES_MAPPED[1]);
+    delay(10);
+    previousTime[RC_CH3_ESTOP] = currentTime;  // update time
+    prevEStop = pulseWidth;                  // throttle or brake
+    estopFlag = 1;                           // valid data
+  }
+}
+
 // Checks for valid data for steering, throttle, and brakes
 bool RC_Controller::checkValidData() {
   return (throttleBrakeFlag && steeringFlag);
@@ -122,7 +162,6 @@ void RC_Controller::clearFlag() {
   throttleBrakeFlag = 0;
   steeringFlag = 0;
 }
-
 
 /* Interrupt Service Routine */
 void RC_Controller::ISR_STEERING_RISE() {
@@ -161,6 +200,27 @@ void RC_Controller::ISR_THROTTLE_FALL() {
     elapsedTime[RC_CH2_THROTTLE_BR] = micros() - RC_RISE[RC_CH2_THROTTLE_BR];
     RC_ELAPSED[RC_CH2_THROTTLE_BR] = elapsedTime[RC_CH2_THROTTLE_BR];
     attachInterrupt(digitalPinToInterrupt(THROTTLE_BR_CH2_PIN), ISR_THROTTLE_RISE, RISING);
+    interrupts();
+  }
+}
+
+// new isr functions for estop
+void RC_Controller::ISR_ESTOP_RISE() {
+  if (digitalRead(ESTOP_CH3_PIN) == HIGH) { // filter pulse widths
+    noInterrupts();
+    riseTime[RC_CH3_ESTOP] = micros();
+    RC_RISE[RC_CH3_ESTOP] = riseTime[RC_CH3_ESTOP];
+    attachInterrupt(digitalPinToInterrupt(ESTOP_CH3_PIN), ISR_ESTOP_FALL, FALLING);
+    interrupts();
+  }
+}
+
+void RC_Controller::ISR_ESTOP_FALL() {
+  if (digitalRead(ESTOP_CH3_PIN) == LOW) {  // filter pulse widths
+    noInterrupts();
+    elapsedTime[RC_CH3_ESTOP] = micros() - RC_RISE[RC_CH3_ESTOP];
+    RC_ELAPSED[RC_CH3_ESTOP] = elapsedTime[RC_CH3_ESTOP];
+    attachInterrupt(digitalPinToInterrupt(ESTOP_CH3_PIN), ISR_ESTOP_RISE, RISING);
     interrupts();
   }
 }
